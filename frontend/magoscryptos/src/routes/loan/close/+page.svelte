@@ -1,0 +1,212 @@
+<script lang="ts">
+	import { Amount, TokenAmount, RiskBadge } from '$lib/components/display';
+	import { Button } from '$lib/components/ui';
+
+	// Mock loan data
+	const loan = {
+		collateralSymbol: 'ETH',
+		collateralAmount: 5.0,
+		debtAmount: 8500,
+		interestRate: 5.5,
+		accruedInterest: 47.25
+	};
+
+	const totalDebt = $derived(loan.debtAmount + loan.accruedInterest);
+	const collateralPrice = 2450;
+	const collateralValue = $derived(loan.collateralAmount * collateralPrice);
+
+	let confirmed = $state(false);
+
+	function handleClose(e: Event) {
+		e.preventDefault();
+		window.location.href = '/transactions';
+	}
+</script>
+
+<div class="close-panel">
+	<div class="close-summary">
+		<h3 class="summary-title">Close Loan Summary</h3>
+		<p class="summary-description">
+			Closing your loan will repay all outstanding debt and return your collateral.
+		</p>
+
+		<div class="summary-grid">
+			<div class="summary-item">
+				<span class="summary-label">Collateral to Receive</span>
+				<TokenAmount value={loan.collateralAmount} symbol={loan.collateralSymbol} size="lg" />
+				<span class="summary-secondary">
+					~$<Amount value={collateralValue} decimals={0} />
+				</span>
+			</div>
+
+			<div class="summary-item">
+				<span class="summary-label">Total Debt to Repay</span>
+				<TokenAmount value={totalDebt} symbol="BOLD" size="lg" />
+			</div>
+		</div>
+
+		<div class="breakdown">
+			<h4 class="breakdown-title">Debt Breakdown</h4>
+			<div class="breakdown-item">
+				<span>Principal</span>
+				<span><Amount value={loan.debtAmount} decimals={2} suffix=" BOLD" /></span>
+			</div>
+			<div class="breakdown-item">
+				<span>Accrued Interest</span>
+				<span><Amount value={loan.accruedInterest} decimals={2} suffix=" BOLD" /></span>
+			</div>
+			<div class="breakdown-item total">
+				<span>Total</span>
+				<span><Amount value={totalDebt} decimals={2} suffix=" BOLD" /></span>
+			</div>
+		</div>
+	</div>
+
+	<!-- Warning -->
+	<div class="warning">
+		<strong>Important:</strong> This action will close your loan position entirely.
+		You will need to open a new loan if you want to borrow again.
+	</div>
+
+	<!-- Confirmation -->
+	<label class="confirmation">
+		<input type="checkbox" bind:checked={confirmed} />
+		<span>I understand that this will close my loan and return my collateral</span>
+	</label>
+
+	<Button
+		variant="negative"
+		size="lg"
+		disabled={!confirmed}
+		onclick={handleClose}
+	>
+		Close Loan & Withdraw Collateral
+	</Button>
+
+	<p class="alternative">
+		Need to adjust your position instead?
+		<a href="/loan/colldebt">Update your collateral or debt</a>
+	</p>
+</div>
+
+<style>
+	.close-panel {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-24);
+	}
+
+	.close-summary {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-16);
+		padding: var(--space-24);
+		background-color: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+	}
+
+	.summary-title {
+		font-size: var(--text-lg);
+		font-weight: var(--weight-semibold);
+		margin: 0;
+	}
+
+	.summary-description {
+		color: var(--color-content-alt);
+		margin: 0;
+	}
+
+	.summary-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--space-24);
+		padding: var(--space-16) 0;
+		border-top: 1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.summary-item {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-8);
+	}
+
+	.summary-label {
+		font-size: var(--text-sm);
+		color: var(--color-content-alt);
+	}
+
+	.summary-secondary {
+		font-size: var(--text-sm);
+		color: var(--color-content-alt);
+	}
+
+	.breakdown {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-8);
+	}
+
+	.breakdown-title {
+		font-size: var(--text-sm);
+		font-weight: var(--weight-semibold);
+		margin: 0 0 var(--space-8) 0;
+		color: var(--color-content-alt);
+	}
+
+	.breakdown-item {
+		display: flex;
+		justify-content: space-between;
+		font-size: var(--text-sm);
+	}
+
+	.breakdown-item.total {
+		padding-top: var(--space-8);
+		border-top: 1px solid var(--color-border);
+		font-weight: var(--weight-semibold);
+	}
+
+	.warning {
+		padding: var(--space-16);
+		background-color: var(--color-warning-surface);
+		border: 1px solid var(--color-warning);
+		border-radius: var(--radius-md);
+		font-size: var(--text-sm);
+		color: var(--color-warning);
+	}
+
+	.confirmation {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-12);
+		cursor: pointer;
+	}
+
+	.confirmation input {
+		margin-top: 2px;
+		width: 18px;
+		height: 18px;
+		accent-color: var(--color-primary);
+	}
+
+	.confirmation span {
+		font-size: var(--text-sm);
+		color: var(--color-content);
+	}
+
+	.alternative {
+		text-align: center;
+		font-size: var(--text-sm);
+		color: var(--color-content-alt);
+	}
+
+	.alternative a {
+		color: var(--color-primary);
+		text-decoration: none;
+	}
+
+	.alternative a:hover {
+		text-decoration: underline;
+	}
+</style>
