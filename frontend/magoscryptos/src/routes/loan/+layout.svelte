@@ -1,11 +1,27 @@
+<script lang="ts" context="module">
+	import { setContext, getContext } from 'svelte';
+	import type { FormattedTrove } from '$lib/stores/troves.svelte';
+
+	const LOAN_CONTEXT_KEY = 'loan';
+
+	export function getLoanContext(): { trove: FormattedTrove | null } {
+		return getContext(LOAN_CONTEXT_KEY);
+	}
+</script>
+
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { Screen } from '$lib/components/layout';
 	import { Tabs, TokenIcon } from '$lib/components/ui';
 	import { Amount, RiskBadge, TokenAmount } from '$lib/components/display';
+	import { TxModal } from '$lib/components/transactions';
+	import { troves, prices } from '$lib/stores';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
+
+	// Get trove ID from URL query params (e.g., /loan?id=123)
+	const troveId = $derived($page.url.searchParams.get('id'));
 
 	// Get current tab from URL
 	const currentTab = $derived($page.url.pathname.split('/').pop() || 'colldebt');
@@ -16,19 +32,66 @@
 		{ id: 'close', label: 'Close Loan' }
 	];
 
-	// Mock loan data (would come from URL params + API in real app)
-	const loan = {
-		collateralSymbol: 'ETH',
-		collateralAmount: 5.0,
-		debtAmount: 8500,
-		interestRate: 5.5,
-		ltv: 69.4,
-		liquidationPrice: 1870,
-		riskLevel: 'medium' as const
-	};
+	// Get actual trove data from store (find by ID or use first trove)
+	const userTrove = $derived.by(() => {
+		if (troveId) {
+			return troves.troves.find((t) => t.id === troveId) ?? null;
+		}
+		// Default to first trove if no ID specified
+		return troves.troves[0] ?? null;
+	});
+
+	// Fallback mock data when no real trove
+	const loan = $derived.by(() => {
+		if (userTrove) {
+			const price = prices.getRawPrice(userTrove.collateralSymbol) ?? 2450;
+			const collateralValue = userTrove.collateral * price;
+			const ltv = collateralValue > 0 ? (userTrove.debt / collateralValue) * 100 : 0;
+			const liquidationPrice = userTrove.debt > 0 && userTrove.collateral > 0
+				? (userTrove.debt * 1.1) / userTrove.collateral
+				: 0;
+			const riskLevel: 'low' | 'medium' | 'high' | 'critical' =
+				ltv < 50 ? 'low' : ltv < 70 ? 'medium' : ltv < 85 ? 'high' : 'critical';
+
+			return {
+				id: userTrove.id,
+				branchId: userTrove.branchId,
+				collateralSymbol: userTrove.collateralSymbol,
+				collateralAmount: userTrove.collateral,
+				debtAmount: userTrove.debt,
+				interestRate: userTrove.interestRate,
+				ltv,
+				liquidationPrice,
+				riskLevel
+			};
+		}
+		// Mock fallback
+		return {
+			id: '0',
+			branchId: 0,
+			collateralSymbol: 'ETH',
+			collateralAmount: 5.0,
+			debtAmount: 8500,
+			interestRate: 5.5,
+			ltv: 69.4,
+			liquidationPrice: 1870,
+			riskLevel: 'medium' as const
+		};
+	});
+
+	// Provide loan context to child routes
+	setContext(LOAN_CONTEXT_KEY, {
+		get trove() {
+			return userTrove;
+		},
+		get loan() {
+			return loan;
+		}
+	});
 
 	function handleTabChange(tabId: string) {
-		window.location.href = `/loan/${tabId}`;
+		const query = troveId ? `?id=${troveId}` : '';
+		window.location.href = `/loan/${tabId}${query}`;
 	}
 </script>
 
@@ -75,6 +138,9 @@
 	<div class="tab-content">
 		{@render children()}
 	</div>
+
+	<!-- Transaction Modal -->
+	<TxModal />
 </Screen>
 
 <style>

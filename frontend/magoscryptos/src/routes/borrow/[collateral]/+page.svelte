@@ -4,17 +4,30 @@
 	import { AmountInput, InterestRateField, CollateralSelector } from '$lib/components/forms';
 	import { Amount, RiskBadge } from '$lib/components/display';
 	import { Button, Alert } from '$lib/components/ui';
+	import { TxModal } from '$lib/components/transactions';
+	import { wallet, prices } from '$lib/stores';
+	import { txContext, getOpenBorrowFlowDefinition, type OpenBorrowRequest } from '$lib/transactions';
+	import { parseEther, maxUint256 } from 'viem';
 
 	const collateral = $derived($page.params.collateral?.toUpperCase() ?? 'ETH');
+
+	// Map collateral symbol to branch ID
+	const BRANCH_IDS: Record<string, number> = { ETH: 0, WSTETH: 1, RETH: 2 };
+	const branchId = $derived(BRANCH_IDS[collateral] ?? 0);
 
 	// Form state
 	let depositAmount = $state('');
 	let borrowAmount = $state('');
 	let interestRate = $state('5.5');
 	let interestMode = $state<'manual' | 'delegate'>('manual');
+	let isSubmitting = $state(false);
 
-	// Mock calculations
-	const collateralPrice = 2450; // Mock ETH price
+	// Real price from price feed (fallback to mock if not available)
+	const collateralPrice = $derived(
+		prices.formattedPrices[collateral as keyof typeof prices.formattedPrices] ?? 2450
+	);
+
+	// Calculations
 	const depositValue = $derived(parseFloat(depositAmount) * collateralPrice || 0);
 	const borrowValue = $derived(parseFloat(borrowAmount) || 0);
 	const ltv = $derived(depositValue > 0 ? (borrowValue / depositValue) * 100 : 0);
@@ -27,10 +40,44 @@
 		ltv < 50 ? 'low' : ltv < 70 ? 'medium' : ltv < 85 ? 'high' : 'critical'
 	);
 
-	function handleSubmit(e: Event) {
+	// Validation
+	const isValidForm = $derived(
+		wallet.isConnected &&
+		parseFloat(depositAmount) > 0 &&
+		parseFloat(borrowAmount) >= 2000 && // Min debt is 2000 BOLD
+		parseFloat(interestRate) > 0
+	);
+
+	async function handleSubmit(e: Event) {
 		e.preventDefault();
-		// Would trigger transaction flow
-		window.location.href = '/transactions';
+
+		if (!wallet.address || !isValidForm) return;
+
+		isSubmitting = true;
+
+		try {
+			// Convert form values to BigInt (18 decimals)
+			const collateralAmountBn = parseEther(depositAmount);
+			const borrowAmountBn = parseEther(borrowAmount);
+			const interestRateBn = parseEther((parseFloat(interestRate) / 100).toString()); // Convert % to decimal
+
+			const request: OpenBorrowRequest = {
+				flowId: 'openBorrow',
+				account: wallet.address,
+				branchId,
+				collateralAmount: collateralAmountBn,
+				borrowAmount: borrowAmountBn,
+				interestRate: interestRateBn,
+				maxUpfrontFee: maxUint256
+			};
+
+			const flowDef = getOpenBorrowFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+		} catch (error) {
+			console.error('Failed to start borrow flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
 	}
 </script>
 
@@ -111,10 +158,24 @@
 		{/if}
 
 		<!-- Submit Button -->
-		<Button type="submit" variant="primary" size="lg">
-			Open Borrow Position
-		</Button>
+		{#if !wallet.isConnected}
+			<Button type="button" variant="primary" size="lg" onclick={() => wallet.connect()}>
+				Connect Wallet
+			</Button>
+		{:else}
+			<Button
+				type="submit"
+				variant="primary"
+				size="lg"
+				disabled={!isValidForm || isSubmitting}
+			>
+				{isSubmitting ? 'Processing...' : 'Open Borrow Position'}
+			</Button>
+		{/if}
 	</form>
+
+	<!-- Transaction Modal -->
+	<TxModal />
 </Screen>
 
 <style>

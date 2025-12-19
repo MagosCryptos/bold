@@ -122,3 +122,28 @@ export async function needsBoldApprovalForStabilityPool(
 	const stabilityPool = getBranchContract(branchId, 'StabilityPool');
 	return needsApproval(boldToken.address, owner, stabilityPool.address, amount);
 }
+
+/**
+ * Check if BOLD approval is needed for BorrowerOperations (repayment)
+ */
+export async function needsBoldApproval(
+	branchId: number,
+	owner: Address,
+	amount: bigint
+): Promise<boolean> {
+	const boldToken = getProtocolContract('BoldToken');
+	const borrowerOps = getBranchContract(branchId, 'BorrowerOperations');
+	return needsApproval(boldToken.address, owner, borrowerOps.address, amount);
+}
+
+/**
+ * Approve BOLD for BorrowerOperations (repayment/close trove)
+ */
+export async function approveBoldForRepayment(
+	branchId: number,
+	amount: bigint = maxUint256
+): Promise<`0x${string}`> {
+	const boldToken = getProtocolContract('BoldToken');
+	const borrowerOps = getBranchContract(branchId, 'BorrowerOperations');
+	return approveToken(boldToken.address, borrowerOps.address, amount);
+}

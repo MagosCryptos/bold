@@ -4,25 +4,120 @@
 	import { AmountInput } from '$lib/components/forms';
 	import { Amount, TokenAmount } from '$lib/components/display';
 	import { Button, Tabs, TokenIcon } from '$lib/components/ui';
+	import { TxModal } from '$lib/components/transactions';
+	import { wallet, positions } from '$lib/stores';
+	import {
+		txContext,
+		getEarnDepositFlowDefinition,
+		getEarnWithdrawFlowDefinition,
+		getEarnClaimFlowDefinition,
+		type EarnDepositRequest,
+		type EarnWithdrawRequest
+	} from '$lib/transactions';
+	import { parseEther } from 'viem';
 
 	const pool = $derived($page.params.pool?.toUpperCase() ?? 'ETH');
 
+	// Map pool symbol to branch ID
+	const BRANCH_IDS: Record<string, number> = { ETH: 0, WSTETH: 1, RETH: 2 };
+	const branchId = $derived(BRANCH_IDS[pool] ?? 0);
+
 	let activeTab = $state('deposit');
 	let depositAmount = $state('');
+	let withdrawAmount = $state('');
+	let isSubmitting = $state(false);
 
 	const tabs = [
 		{ id: 'deposit', label: 'Deposit' },
-		{ id: 'claim', label: 'Claim' },
-		{ id: 'compound', label: 'Compound' }
+		{ id: 'withdraw', label: 'Withdraw' },
+		{ id: 'claim', label: 'Claim' }
 	];
 
-	// Mock data
-	const poolData = {
-		apr: 8.5,
-		tvl: '45.2M',
-		yourDeposit: 5000,
-		earnedRewards: 0.125
-	};
+	// Get real position data if available
+	const userPosition = $derived(
+		positions.positions.find((p) => p.symbol === pool)
+	);
+	const poolData = $derived({
+		apr: 8.5, // TODO: Get from subgraph
+		tvl: '45.2M', // TODO: Get from pools store
+		yourDeposit: userPosition?.deposited ?? 0,
+		earnedRewards: userPosition?.rewards ?? 0
+	});
+
+	// Validation
+	const isValidDeposit = $derived(
+		wallet.isConnected && parseFloat(depositAmount) > 0
+	);
+	const isValidWithdraw = $derived(
+		wallet.isConnected &&
+		parseFloat(withdrawAmount) > 0 &&
+		parseFloat(withdrawAmount) <= poolData.yourDeposit
+	);
+	const hasRewards = $derived(poolData.earnedRewards > 0);
+
+	async function handleDeposit() {
+		if (!wallet.address || !isValidDeposit) return;
+
+		isSubmitting = true;
+		try {
+			const request: EarnDepositRequest = {
+				flowId: 'earnDeposit',
+				account: wallet.address,
+				branchId,
+				amount: parseEther(depositAmount)
+			};
+			const flowDef = getEarnDepositFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+			depositAmount = '';
+		} catch (error) {
+			console.error('Failed to start deposit flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	async function handleWithdraw() {
+		if (!wallet.address || !isValidWithdraw) return;
+
+		isSubmitting = true;
+		try {
+			const request: EarnWithdrawRequest = {
+				flowId: 'earnWithdraw',
+				account: wallet.address,
+				branchId,
+				amount: parseEther(withdrawAmount),
+				claimRewards: false
+			};
+			const flowDef = getEarnWithdrawFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+			withdrawAmount = '';
+		} catch (error) {
+			console.error('Failed to start withdraw flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	async function handleClaim() {
+		if (!wallet.address || !hasRewards) return;
+
+		isSubmitting = true;
+		try {
+			const request: EarnWithdrawRequest = {
+				flowId: 'earnWithdraw',
+				account: wallet.address,
+				branchId,
+				amount: 0n,
+				claimRewards: true
+			};
+			const flowDef = getEarnClaimFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+		} catch (error) {
+			console.error('Failed to start claim flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
+	}
 </script>
 
 <Screen title="{pool} Stability Pool" subtitle="Deposit BOLD to earn {pool} from liquidations">
@@ -53,7 +148,43 @@
 						label="Deposit Amount"
 						maxValue="10000"
 					/>
-					<Button variant="primary" size="lg">Deposit BOLD</Button>
+					{#if !wallet.isConnected}
+						<Button variant="primary" size="lg" onclick={() => wallet.connect()}>
+							Connect Wallet
+						</Button>
+					{:else}
+						<Button
+							variant="primary"
+							size="lg"
+							onclick={handleDeposit}
+							disabled={!isValidDeposit || isSubmitting}
+						>
+							{isSubmitting ? 'Processing...' : 'Deposit BOLD'}
+						</Button>
+					{/if}
+				</div>
+			{:else if activeTab === 'withdraw'}
+				<div class="action-panel">
+					<AmountInput
+						bind:value={withdrawAmount}
+						symbol="BOLD"
+						label="Withdraw Amount"
+						maxValue={poolData.yourDeposit.toString()}
+					/>
+					{#if !wallet.isConnected}
+						<Button variant="primary" size="lg" onclick={() => wallet.connect()}>
+							Connect Wallet
+						</Button>
+					{:else}
+						<Button
+							variant="primary"
+							size="lg"
+							onclick={handleWithdraw}
+							disabled={!isValidWithdraw || isSubmitting}
+						>
+							{isSubmitting ? 'Processing...' : 'Withdraw BOLD'}
+						</Button>
+					{/if}
 				</div>
 			{:else if activeTab === 'claim'}
 				<div class="action-panel">
@@ -61,18 +192,27 @@
 						<span class="claim-label">Available to Claim</span>
 						<TokenAmount value={poolData.earnedRewards} symbol={pool} size="lg" />
 					</div>
-					<Button variant="primary" size="lg">Claim Rewards</Button>
-				</div>
-			{:else}
-				<div class="action-panel">
-					<div class="compound-info">
-						<p>Compound your BOLD yield earnings back into your deposit to increase your earning power.</p>
-					</div>
-					<Button variant="primary" size="lg">Compound Yield</Button>
+					{#if !wallet.isConnected}
+						<Button variant="primary" size="lg" onclick={() => wallet.connect()}>
+							Connect Wallet
+						</Button>
+					{:else}
+						<Button
+							variant="primary"
+							size="lg"
+							onclick={handleClaim}
+							disabled={!hasRewards || isSubmitting}
+						>
+							{isSubmitting ? 'Processing...' : 'Claim Rewards'}
+						</Button>
+					{/if}
 				</div>
 			{/if}
 		</div>
 	</div>
+
+	<!-- Transaction Modal -->
+	<TxModal />
 </Screen>
 
 <style>

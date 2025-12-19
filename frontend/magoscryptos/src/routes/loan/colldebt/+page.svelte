@@ -1,23 +1,36 @@
 <script lang="ts">
+	import { getContext } from 'svelte';
 	import { AmountInput } from '$lib/components/forms';
 	import { Amount, RiskBadge } from '$lib/components/display';
 	import { Button, Tabs, Alert } from '$lib/components/ui';
+	import { wallet, prices } from '$lib/stores';
+	import {
+		txContext,
+		getAdjustTroveFlowDefinition,
+		type AdjustTroveRequest
+	} from '$lib/transactions';
+	import { parseEther, maxUint256 } from 'viem';
+
+	// Get loan context from layout
+	const loanContext = getContext<{ loan: any }>('loan');
+	const loan = $derived(loanContext.loan);
 
 	let mode = $state<'add' | 'remove'>('add');
 	let collateralAmount = $state('');
 	let debtAmount = $state('');
+	let isSubmitting = $state(false);
 
 	const modeTabs = [
 		{ id: 'add', label: 'Add' },
 		{ id: 'remove', label: 'Remove' }
 	];
 
-	// Mock current loan values
-	const currentLoan = {
-		collateral: 5.0,
-		debt: 8500,
-		collateralPrice: 2450
-	};
+	// Get current loan values from context
+	const currentLoan = $derived({
+		collateral: loan.collateralAmount,
+		debt: loan.debtAmount,
+		collateralPrice: prices.getRawPrice(loan.collateralSymbol) ?? 2450
+	});
 
 	// Calculate new values
 	const collateralChange = $derived(parseFloat(collateralAmount) || 0);
@@ -45,9 +58,54 @@
 		newLtv < 50 ? 'low' : newLtv < 70 ? 'medium' : newLtv < 85 ? 'high' : 'critical'
 	);
 
-	function handleSubmit(e: Event) {
+	// Validation
+	const hasCollateralChange = $derived(collateralChange > 0);
+	const hasDebtChange = $derived(debtChange > 0);
+	const hasAnyChange = $derived(hasCollateralChange || hasDebtChange);
+
+	const isValidRemoval = $derived(
+		mode !== 'remove' || (newCollateral >= 0 && newDebt >= 0)
+	);
+
+	const isValidForm = $derived(
+		wallet.isConnected && hasAnyChange && isValidRemoval
+	);
+
+	async function handleSubmit(e: Event) {
 		e.preventDefault();
-		window.location.href = '/transactions';
+		if (!wallet.address || !isValidForm) return;
+
+		isSubmitting = true;
+		try {
+			// Calculate collateral and debt changes as BigInt
+			// Positive = adding, negative = removing
+			const collChangeAmount = parseEther(collateralAmount || '0');
+			const debtChangeAmount = parseEther(debtAmount || '0');
+
+			const collateralChangeBn = mode === 'add' ? collChangeAmount : -collChangeAmount;
+			const debtChangeBn = mode === 'add' ? debtChangeAmount : -debtChangeAmount;
+
+			const request: AdjustTroveRequest = {
+				flowId: 'adjustTrove',
+				account: wallet.address,
+				branchId: loan.branchId,
+				troveId: loan.id,
+				collateralChange: collateralChangeBn,
+				debtChange: debtChangeBn,
+				maxUpfrontFee: maxUint256
+			};
+
+			const flowDef = getAdjustTroveFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+
+			// Reset form on success
+			collateralAmount = '';
+			debtAmount = '';
+		} catch (error) {
+			console.error('Failed to start adjust flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
 	}
 </script>
 
@@ -123,9 +181,18 @@
 		<Alert variant="error">
 			Cannot repay more debt than you owe.
 		</Alert>
+	{:else if !wallet.isConnected}
+		<Button type="button" variant="primary" size="lg" onclick={() => wallet.connect()}>
+			Connect Wallet
+		</Button>
 	{:else}
-		<Button type="submit" variant="primary" size="lg">
-			{mode === 'add' ? 'Add to Position' : 'Remove from Position'}
+		<Button
+			type="submit"
+			variant="primary"
+			size="lg"
+			disabled={!isValidForm || isSubmitting}
+		>
+			{isSubmitting ? 'Processing...' : mode === 'add' ? 'Add to Position' : 'Remove from Position'}
 		</Button>
 	{/if}
 </form>

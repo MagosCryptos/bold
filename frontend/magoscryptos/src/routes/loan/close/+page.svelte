@@ -1,25 +1,54 @@
 <script lang="ts">
+	import { getContext } from 'svelte';
 	import { Amount, TokenAmount } from '$lib/components/display';
 	import { Button, Checkbox, Alert } from '$lib/components/ui';
+	import { wallet, prices } from '$lib/stores';
+	import {
+		txContext,
+		getCloseTroveFlowDefinition,
+		type CloseTroveRequest
+	} from '$lib/transactions';
 
-	// Mock loan data
-	const loan = {
-		collateralSymbol: 'ETH',
-		collateralAmount: 5.0,
-		debtAmount: 8500,
-		interestRate: 5.5,
-		accruedInterest: 47.25
-	};
+	// Get loan context from layout
+	const loanContext = getContext<{ loan: any }>('loan');
+	const loanData = $derived(loanContext.loan);
+
+	// Use real loan data
+	const loan = $derived({
+		collateralSymbol: loanData.collateralSymbol,
+		collateralAmount: loanData.collateralAmount,
+		debtAmount: loanData.debtAmount,
+		interestRate: loanData.interestRate,
+		accruedInterest: 0 // TODO: Calculate from subgraph
+	});
 
 	const totalDebt = $derived(loan.debtAmount + loan.accruedInterest);
-	const collateralPrice = 2450;
+	const collateralPrice = $derived(prices.getRawPrice(loan.collateralSymbol) ?? 2450);
 	const collateralValue = $derived(loan.collateralAmount * collateralPrice);
 
 	let confirmed = $state(false);
+	let isSubmitting = $state(false);
 
-	function handleClose(e: Event) {
+	async function handleClose(e: Event) {
 		e.preventDefault();
-		window.location.href = '/transactions';
+		if (!wallet.address || !confirmed) return;
+
+		isSubmitting = true;
+		try {
+			const request: CloseTroveRequest = {
+				flowId: 'closeTrove',
+				account: wallet.address,
+				branchId: loanData.branchId,
+				troveId: loanData.id
+			};
+
+			const flowDef = getCloseTroveFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+		} catch (error) {
+			console.error('Failed to start close flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
 	}
 </script>
 
@@ -74,14 +103,20 @@
 		label="I understand that this will close my loan and return my collateral"
 	/>
 
-	<Button
-		variant="negative"
-		size="lg"
-		disabled={!confirmed}
-		onclick={handleClose}
-	>
-		Close Loan & Withdraw Collateral
-	</Button>
+	{#if !wallet.isConnected}
+		<Button variant="primary" size="lg" onclick={() => wallet.connect()}>
+			Connect Wallet
+		</Button>
+	{:else}
+		<Button
+			variant="negative"
+			size="lg"
+			disabled={!confirmed || isSubmitting}
+			onclick={handleClose}
+		>
+			{isSubmitting ? 'Processing...' : 'Close Loan & Withdraw Collateral'}
+		</Button>
+	{/if}
 
 	<p class="alternative">
 		Need to adjust your position instead?
