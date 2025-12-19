@@ -2,8 +2,8 @@
 	import { page } from '$app/stores';
 	import { Screen } from '$lib/components/layout';
 	import { AmountInput, InterestRateField, CollateralSelector } from '$lib/components/forms';
-	import { Amount, RiskBadge } from '$lib/components/display';
-	import { Button } from '$lib/components/ui';
+	import { Amount, RiskBadge, SummaryCard } from '$lib/components/display';
+	import { Button, Slider, Alert } from '$lib/components/ui';
 
 	const collateral = $derived($page.params.collateral?.toUpperCase() ?? 'ETH');
 
@@ -57,24 +57,16 @@
 		/>
 
 		<!-- Leverage Slider -->
-		<div class="leverage-field">
-			<div class="leverage-header">
-				<span class="leverage-label">Leverage</span>
-				<span class="leverage-value">{leverageFactor.toFixed(1)}x</span>
-			</div>
-			<input
-				type="range"
-				class="leverage-slider"
-				min="1.1"
-				max="5"
-				step="0.1"
-				bind:value={leverageFactor}
-			/>
-			<div class="leverage-range">
-				<span>1.1x</span>
-				<span>5.0x</span>
-			</div>
-		</div>
+		<Slider
+			bind:value={leverageFactor}
+			min={1.1}
+			max={5}
+			step={0.1}
+			label="Leverage"
+			valueLabel="{leverageFactor.toFixed(1)}x"
+			minLabel="1.1x"
+			maxLabel="5.0x"
+		/>
 
 		<!-- Interest Rate -->
 		<InterestRateField
@@ -128,20 +120,19 @@
 
 		<!-- Warning -->
 		{#if ltv > 80}
-			<div class="warning">
-				<strong>High Risk Warning:</strong> Your leveraged position has a high LTV ratio and may be liquidated if the collateral price drops.
-			</div>
+			<Alert variant="warning" title="High Risk Warning">
+				Your leveraged position has a high LTV ratio and may be liquidated if the collateral price drops.
+			</Alert>
 		{/if}
 
 		<!-- Info -->
-		<div class="info">
-			<h4>How Leverage Works</h4>
+		<Alert variant="info" title="How Leverage Works">
 			<ul>
 				<li>Your deposit is used as collateral to borrow BOLD</li>
 				<li>BOLD is swapped for more {collateral} to increase exposure</li>
 				<li>Higher leverage = higher potential gains but also higher liquidation risk</li>
 			</ul>
-		</div>
+		</Alert>
 
 		<!-- Submit Button -->
 		<Button type="submit" variant="primary" size="lg">
@@ -156,72 +147,6 @@
 		flex-direction: column;
 		gap: var(--space-24);
 		max-width: 480px;
-	}
-
-	.leverage-field {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-12);
-		padding: var(--space-16);
-		background-color: var(--color-surface);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-	}
-
-	.leverage-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.leverage-label {
-		font-size: var(--text-sm);
-		color: var(--color-content-alt);
-	}
-
-	.leverage-value {
-		font-size: var(--text-xl);
-		font-weight: var(--weight-bold);
-		color: var(--color-primary);
-	}
-
-	.leverage-slider {
-		width: 100%;
-		height: 8px;
-		border-radius: 4px;
-		background: var(--color-surface-secondary);
-		outline: none;
-		-webkit-appearance: none;
-		appearance: none;
-	}
-
-	.leverage-slider::-webkit-slider-thumb {
-		-webkit-appearance: none;
-		appearance: none;
-		width: 24px;
-		height: 24px;
-		border-radius: 50%;
-		background: var(--color-primary);
-		cursor: pointer;
-		border: 3px solid var(--color-surface);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-	}
-
-	.leverage-slider::-moz-range-thumb {
-		width: 24px;
-		height: 24px;
-		border-radius: 50%;
-		background: var(--color-primary);
-		cursor: pointer;
-		border: 3px solid var(--color-surface);
-		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-	}
-
-	.leverage-range {
-		display: flex;
-		justify-content: space-between;
-		font-size: var(--text-xs);
-		color: var(--color-content-alt);
 	}
 
 	.summary {
@@ -272,42 +197,5 @@
 	.summary-secondary {
 		font-size: var(--text-sm);
 		color: var(--color-content-alt);
-	}
-
-	.warning {
-		padding: var(--space-16);
-		background-color: var(--color-warning-surface);
-		border: 1px solid var(--color-warning);
-		border-radius: var(--radius-md);
-		font-size: var(--text-sm);
-		color: var(--color-warning);
-	}
-
-	.info {
-		padding: var(--space-16);
-		background-color: var(--color-info-surface);
-		border: 1px solid var(--color-info);
-		border-radius: var(--radius-md);
-	}
-
-	.info h4 {
-		margin: 0 0 var(--space-8) 0;
-		font-size: var(--text-sm);
-		font-weight: var(--weight-semibold);
-	}
-
-	.info ul {
-		margin: 0;
-		padding-left: var(--space-16);
-		font-size: var(--text-sm);
-		color: var(--color-content-alt);
-	}
-
-	.info li {
-		margin-bottom: var(--space-4);
-	}
-
-	.info li:last-child {
-		margin-bottom: 0;
 	}
 </style>

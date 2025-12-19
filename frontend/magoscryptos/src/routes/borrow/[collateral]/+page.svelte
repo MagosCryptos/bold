@@ -3,7 +3,7 @@
 	import { Screen } from '$lib/components/layout';
 	import { AmountInput, InterestRateField, CollateralSelector } from '$lib/components/forms';
 	import { Amount, RiskBadge } from '$lib/components/display';
-	import { Button } from '$lib/components/ui';
+	import { Button, Alert } from '$lib/components/ui';
 
 	const collateral = $derived($page.params.collateral?.toUpperCase() ?? 'ETH');
 
@@ -105,9 +105,9 @@
 
 		<!-- Warning -->
 		{#if ltv > 80}
-			<div class="warning">
-				<strong>High Risk Warning:</strong> Your position has a high LTV ratio and may be liquidated if the collateral price drops.
-			</div>
+			<Alert variant="warning" title="High Risk Warning">
+				Your position has a high LTV ratio and may be liquidated if the collateral price drops.
+			</Alert>
 		{/if}
 
 		<!-- Submit Button -->
@@ -192,12 +192,4 @@
 		font-weight: var(--weight-semibold);
 	}
 
-	.warning {
-		padding: var(--space-16);
-		background-color: var(--color-warning-surface);
-		border: 1px solid var(--color-warning);
-		border-radius: var(--radius-md);
-		font-size: var(--text-sm);
-		color: var(--color-warning);
-	}
 </style>

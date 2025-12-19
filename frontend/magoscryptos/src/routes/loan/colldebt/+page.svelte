@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { AmountInput } from '$lib/components/forms';
 	import { Amount, RiskBadge } from '$lib/components/display';
-	import { Button, Tabs } from '$lib/components/ui';
+	import { Button, Tabs, Alert } from '$lib/components/ui';
 
 	let mode = $state<'add' | 'remove'>('add');
 	let collateralAmount = $state('');
@@ -110,19 +110,19 @@
 	</div>
 
 	{#if newLtv > 80}
-		<div class="warning">
-			<strong>Warning:</strong> High LTV ratio. Your position may be at risk of liquidation.
-		</div>
+		<Alert variant="warning" title="Warning">
+			High LTV ratio. Your position may be at risk of liquidation.
+		</Alert>
 	{/if}
 
 	{#if mode === 'remove' && newCollateral < 0}
-		<div class="error">
+		<Alert variant="error">
 			Cannot remove more collateral than you have deposited.
-		</div>
+		</Alert>
 	{:else if mode === 'remove' && newDebt < 0}
-		<div class="error">
+		<Alert variant="error">
 			Cannot repay more debt than you owe.
-		</div>
+		</Alert>
 	{:else}
 		<Button type="submit" variant="primary" size="lg">
 			{mode === 'add' ? 'Add to Position' : 'Remove from Position'}
@@ -185,21 +185,4 @@
 		font-weight: var(--weight-semibold);
 	}
 
-	.warning {
-		padding: var(--space-16);
-		background-color: var(--color-warning-surface);
-		border: 1px solid var(--color-warning);
-		border-radius: var(--radius-md);
-		font-size: var(--text-sm);
-		color: var(--color-warning);
-	}
-
-	.error {
-		padding: var(--space-16);
-		background-color: var(--color-error-surface);
-		border: 1px solid var(--color-error);
-		border-radius: var(--radius-md);
-		font-size: var(--text-sm);
-		color: var(--color-error);
-	}
 </style>

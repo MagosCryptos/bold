@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { InterestRateField } from '$lib/components/forms';
 	import { Amount } from '$lib/components/display';
-	import { Button } from '$lib/components/ui';
+	import { Button, Alert } from '$lib/components/ui';
 
 	let interestRate = $state('5.5');
 	let rateMode = $state<'manual' | 'delegate'>('manual');
@@ -67,14 +67,13 @@
 	</div>
 
 	<!-- Info about interest rates -->
-	<div class="info">
-		<h4>About Interest Rates</h4>
+	<Alert variant="info" title="About Interest Rates">
 		<ul>
 			<li>Higher rates provide more protection against redemptions</li>
 			<li>Lower rates mean less interest payments but higher redemption risk</li>
 			<li>Delegating rate management lets a batch manager optimize your rate</li>
 		</ul>
-	</div>
+	</Alert>
 
 	<Button type="submit" variant="primary" size="lg" disabled={newRate === currentRate}>
 		Update Interest Rate
@@ -153,31 +152,4 @@
 		color: var(--color-warning);
 	}
 
-	.info {
-		padding: var(--space-16);
-		background-color: var(--color-info-surface);
-		border: 1px solid var(--color-info);
-		border-radius: var(--radius-md);
-	}
-
-	.info h4 {
-		margin: 0 0 var(--space-8) 0;
-		font-size: var(--text-sm);
-		font-weight: var(--weight-semibold);
-	}
-
-	.info ul {
-		margin: 0;
-		padding-left: var(--space-16);
-		font-size: var(--text-sm);
-		color: var(--color-content-alt);
-	}
-
-	.info li {
-		margin-bottom: var(--space-4);
-	}
-
-	.info li:last-child {
-		margin-bottom: 0;
-	}
 </style>

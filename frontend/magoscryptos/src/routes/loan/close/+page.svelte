@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Amount, TokenAmount, RiskBadge } from '$lib/components/display';
-	import { Button } from '$lib/components/ui';
+	import { Amount, TokenAmount } from '$lib/components/display';
+	import { Button, Checkbox, Alert } from '$lib/components/ui';
 
 	// Mock loan data
 	const loan = {
@@ -63,16 +63,16 @@
 	</div>
 
 	<!-- Warning -->
-	<div class="warning">
-		<strong>Important:</strong> This action will close your loan position entirely.
+	<Alert variant="warning" title="Important">
+		This action will close your loan position entirely.
 		You will need to open a new loan if you want to borrow again.
-	</div>
+	</Alert>
 
 	<!-- Confirmation -->
-	<label class="confirmation">
-		<input type="checkbox" bind:checked={confirmed} />
-		<span>I understand that this will close my loan and return my collateral</span>
-	</label>
+	<Checkbox
+		bind:checked={confirmed}
+		label="I understand that this will close my loan and return my collateral"
+	/>
 
 	<Button
 		variant="negative"
@@ -165,34 +165,6 @@
 		padding-top: var(--space-8);
 		border-top: 1px solid var(--color-border);
 		font-weight: var(--weight-semibold);
-	}
-
-	.warning {
-		padding: var(--space-16);
-		background-color: var(--color-warning-surface);
-		border: 1px solid var(--color-warning);
-		border-radius: var(--radius-md);
-		font-size: var(--text-sm);
-		color: var(--color-warning);
-	}
-
-	.confirmation {
-		display: flex;
-		align-items: flex-start;
-		gap: var(--space-12);
-		cursor: pointer;
-	}
-
-	.confirmation input {
-		margin-top: 2px;
-		width: 18px;
-		height: 18px;
-		accent-color: var(--color-primary);
-	}
-
-	.confirmation span {
-		font-size: var(--text-sm);
-		color: var(--color-content);
 	}
 
 	.alternative {
