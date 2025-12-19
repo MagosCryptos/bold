@@ -3,3 +3,5 @@ export { wallet } from './wallet.svelte';
 export { prices } from './prices.svelte';
 export { positions } from './positions.svelte';
 export { pools } from './pools.svelte';
+export { troves } from './troves.svelte';
+export { protocolStats } from './stats.svelte';

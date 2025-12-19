@@ -5,6 +5,7 @@ export const PUBLIC_CHAIN_RPC_URL = 'https://ethereum-rpc.publicnode.com';
 export const PUBLIC_CHAIN_BLOCK_EXPLORER = 'Etherscan|https://etherscan.io';
 export const PUBLIC_CHAIN_CURRENCY = 'Ether|ETH|18';
 export const PUBLIC_WALLET_CONNECT_PROJECT_ID = 'test-project-id';
+export const PUBLIC_SUBGRAPH_URL = 'https://api.studio.thegraph.com/query/42403/bold/version/latest';
 
 // Protocol contracts (mock addresses)
 export const PUBLIC_CONTRACT_BOLD_TOKEN = '0x0000000000000000000000000000000000000001';

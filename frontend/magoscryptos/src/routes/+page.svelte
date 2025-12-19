@@ -1,17 +1,44 @@
 <script lang="ts">
 	import { Screen } from '$lib/components/layout';
-	import { PositionCard, Amount } from '$lib/components/display';
+	import { PositionCard, Amount, StatCard } from '$lib/components/display';
 	import { Button, TokenIcon, LoadingSpinner } from '$lib/components/ui';
-	import { wallet, positions, prices, pools } from '$lib/stores';
+	import { wallet, positions, prices, pools, troves, protocolStats } from '$lib/stores';
+
+	// Fetch protocol stats on page load
+	$effect(() => {
+		protocolStats.fetchStats();
+	});
 
 	// Fetch user positions when wallet connects
 	$effect(() => {
 		if (wallet.isConnected && wallet.address) {
 			positions.fetchEarnPositions();
+			troves.fetchTroves(wallet.address);
 		} else {
 			positions.clear();
+			troves.clear();
 		}
 	});
+
+	// Map troves to borrow position cards
+	const borrowPositionCards = $derived(
+		troves.activeTroves.map((t) => ({
+			type: 'borrow' as const,
+			collateralSymbol: t.collateralSymbol,
+			collateralAmount: Number(t.deposit) / 1e18,
+			debtAmount: Number(t.debt) / 1e18,
+			interestRate: t.interestRatePercent,
+			ltv: t.collateralRatio ? (100 / t.collateralRatio) * 100 : undefined,
+			riskLevel: t.collateralRatio
+				? t.collateralRatio > 200
+					? ('low' as const)
+					: t.collateralRatio > 150
+						? ('medium' as const)
+						: ('high' as const)
+				: ('medium' as const),
+			href: `/loan/colldebt?coll=${t.collateralIndex}&trove=${t.troveId}`
+		}))
+	);
 
 	// Map earn positions to PositionCard format
 	const earnPositionCards = $derived(
@@ -27,28 +54,40 @@
 			}))
 	);
 
-	// Collateral data with real prices
+	// Combined loading state
+	const isLoadingPositions = $derived(positions.earnLoading || troves.loading);
+
+	// Check if user has any positions
+	const hasPositions = $derived(borrowPositionCards.length > 0 || earnPositionCards.length > 0);
+
+	// Collateral data with real prices and stats
 	const collaterals = $derived([
 		{
 			symbol: 'ETH',
 			name: 'Ethereum',
 			interestRate: '4.5 - 7.2%',
 			maxLtv: '90.9%',
-			price: prices.formattedPrices.ETH
+			price: prices.formattedPrices.ETH,
+			totalDebt: protocolStats.getFormattedBranchDebt('ETH'),
+			activeTroves: protocolStats.getBranchStats('ETH')?.activeTroves ?? 0
 		},
 		{
 			symbol: 'WSTETH',
 			name: 'Lido Staked ETH',
 			interestRate: '4.0 - 6.8%',
 			maxLtv: '83.3%',
-			price: prices.formattedPrices.WSTETH
+			price: prices.formattedPrices.WSTETH,
+			totalDebt: protocolStats.getFormattedBranchDebt('WSTETH'),
+			activeTroves: protocolStats.getBranchStats('WSTETH')?.activeTroves ?? 0
 		},
 		{
 			symbol: 'RETH',
 			name: 'Rocket Pool ETH',
 			interestRate: '3.8 - 6.5%',
 			maxLtv: '83.3%',
-			price: prices.formattedPrices.RETH
+			price: prices.formattedPrices.RETH,
+			totalDebt: protocolStats.getFormattedBranchDebt('RETH'),
+			activeTroves: protocolStats.getBranchStats('RETH')?.activeTroves ?? 0
 		}
 	]);
 
@@ -88,6 +127,26 @@
 </script>
 
 <Screen title="Dashboard" maxWidth="lg">
+	<!-- Protocol Stats Section -->
+	<section class="stats-section">
+		<StatCard
+			label="Total BOLD Minted"
+			value={protocolStats.formattedTotalDebt ?? '-'}
+			prefix="$"
+			loading={protocolStats.loading}
+		/>
+		<StatCard
+			label="Active Troves"
+			value={protocolStats.stats?.totalActiveTroves?.toString() ?? '-'}
+			loading={protocolStats.loading}
+		/>
+		<StatCard
+			label="Collateral Types"
+			value="3"
+			subtitle="ETH, wstETH, rETH"
+		/>
+	</section>
+
 	<!-- Positions Section -->
 	<section class="section">
 		<div class="section-header">
@@ -100,12 +159,15 @@
 					Connect Wallet
 				</Button>
 			</div>
-		{:else if positions.earnLoading}
+		{:else if isLoadingPositions}
 			<div class="loading-state">
 				<LoadingSpinner label="Loading positions..." />
 			</div>
-		{:else if earnPositionCards.length > 0}
+		{:else if hasPositions}
 			<div class="positions-grid">
+				{#each borrowPositionCards as position}
+					<PositionCard {...position} />
+				{/each}
 				{#each earnPositionCards as position}
 					<PositionCard {...position} />
 				{/each}
@@ -134,6 +196,7 @@
 						<th>Price</th>
 						<th>Interest Rate</th>
 						<th>Max LTV</th>
+						<th>Total Debt</th>
 						<th></th>
 					</tr>
 				</thead>
@@ -160,6 +223,13 @@
 							</td>
 							<td>{coll.interestRate}</td>
 							<td>{coll.maxLtv}</td>
+							<td>
+								{#if protocolStats.loading}
+									<LoadingSpinner size="sm" />
+								{:else}
+									{coll.totalDebt} BOLD
+								{/if}
+							</td>
 							<td>
 								<Button
 									variant="secondary"
@@ -231,6 +301,12 @@
 </Screen>
 
 <style>
+	.stats-section {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: var(--space-16);
+	}
+
 	.section {
 		display: flex;
 		flex-direction: column;
