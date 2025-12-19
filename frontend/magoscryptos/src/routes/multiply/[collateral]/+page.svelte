@@ -4,52 +4,134 @@
 	import { AmountInput, InterestRateField, CollateralSelector } from '$lib/components/forms';
 	import { Amount, RiskBadge, SummaryCard } from '$lib/components/display';
 	import { Button, Slider, Alert } from '$lib/components/ui';
+	import { TxModal } from '$lib/components/transactions';
+	import { wallet, prices } from '$lib/stores';
+	import { txContext, getOpenLeverageFlowDefinition, type OpenLeverageRequest } from '$lib/transactions';
+	import { BRANCHES } from '$lib/web3';
+	import {
+		LEVERAGE_FACTOR_MIN,
+		getMaxLeverageFactor,
+		getLiquidationRisk,
+		roundLeverageFactor,
+		type RiskLevel
+	} from '$lib/utils/leverage';
+	import { calculateLeverageParams } from '$lib/leverage/quotes';
+	import { parseEther, maxUint256 } from 'viem';
 
-	const collateral = $derived($page.params.collateral?.toUpperCase() ?? 'ETH');
+	const collateralParam = $derived($page.params.collateral?.toUpperCase() ?? 'ETH');
+
+	// Get branch info
+	const branch = $derived(BRANCHES.find(b => b.symbol === collateralParam) ?? BRANCHES[0]);
+	const branchId = $derived(branch.id);
 
 	// Form state
 	let depositAmount = $state('');
 	let leverageFactor = $state(2.0);
 	let interestRate = $state('5.5');
 	let interestMode = $state<'manual' | 'delegate'>('manual');
+	let isSubmitting = $state(false);
+	let isQuoting = $state(false);
+	let quoteError = $state<string | null>(null);
 
-	// Mock calculations
-	const collateralPrice = 2450;
+	// Get real price from store
+	const collateralPrice = $derived(prices.getRawPrice(branch.symbol) ?? 2450);
+
+	// Min collateral ratio (depends on collateral type, ~110% for ETH, higher for LSTs)
+	const minCollRatio = 1.1; // 110% collateral ratio
+	const maxLeverage = $derived(getMaxLeverageFactor(minCollRatio));
+
+	// Derived values
 	const depositValue = $derived(parseFloat(depositAmount) * collateralPrice || 0);
+	const depositBigInt = $derived(depositAmount ? parseEther(depositAmount) : 0n);
 
 	// Leverage calculations
 	const totalExposure = $derived(parseFloat(depositAmount) * leverageFactor || 0);
-	const borrowAmount = $derived((parseFloat(depositAmount) * (leverageFactor - 1) * collateralPrice) || 0);
+	const flashLoanAmount = $derived(totalExposure - parseFloat(depositAmount) || 0);
+	const borrowAmount = $derived(flashLoanAmount * collateralPrice || 0);
+
+	// Liquidation price = (debt * minCollRatio) / totalDeposit
 	const liquidationPrice = $derived(
 		borrowAmount > 0 && totalExposure > 0
-			? (borrowAmount * 1.1) / totalExposure
+			? (borrowAmount * minCollRatio) / totalExposure
 			: 0
 	);
+
+	// LTV = debt / (totalDeposit * price)
 	const ltv = $derived(
 		totalExposure * collateralPrice > 0
-			? (borrowAmount / (totalExposure * collateralPrice)) * 100
+			? borrowAmount / (totalExposure * collateralPrice)
 			: 0
 	);
 
-	const riskLevel = $derived<'low' | 'medium' | 'high' | 'critical'>(
-		ltv < 50 ? 'low' : ltv < 70 ? 'medium' : ltv < 85 ? 'high' : 'critical'
+	const maxLtv = $derived(1 / minCollRatio);
+	const riskLevel = $derived<RiskLevel>(getLiquidationRisk(ltv, maxLtv));
+
+	// Validation
+	const isValidPosition = $derived(
+		wallet.isConnected &&
+		parseFloat(depositAmount) > 0 &&
+		leverageFactor >= LEVERAGE_FACTOR_MIN &&
+		leverageFactor <= maxLeverage
 	);
 
-	function handleSubmit(e: Event) {
+	async function handleSubmit(e: Event) {
 		e.preventDefault();
-		window.location.href = '/transactions';
+		if (!wallet.address || !isValidPosition) return;
+
+		isSubmitting = true;
+		quoteError = null;
+
+		try {
+			// Get leverage parameters from quote system
+			isQuoting = true;
+			const params = await calculateLeverageParams(
+				depositBigInt,
+				leverageFactor,
+				branchId
+			);
+			isQuoting = false;
+
+			// Convert interest rate to bigint (5.5% -> 0.055 -> 55000000000000000)
+			const interestRateBn = parseEther((parseFloat(interestRate) / 100).toString());
+
+			// Build request
+			const request: OpenLeverageRequest = {
+				flowId: 'openLeverage',
+				account: wallet.address,
+				branchId: branchId,
+				ownerIndex: 0, // First trove for this user
+				collateralAmount: depositBigInt,
+				flashLoanAmount: params.flashLoanAmount,
+				boldAmount: params.boldAmount,
+				interestRate: interestRateBn,
+				maxUpfrontFee: maxUint256
+			};
+
+			const flowDef = getOpenLeverageFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+		} catch (error) {
+			console.error('Failed to start leverage flow:', error);
+			quoteError = error instanceof Error ? error.message : 'Failed to calculate leverage';
+		} finally {
+			isSubmitting = false;
+			isQuoting = false;
+		}
+	}
+
+	function handleLeverageChange(value: number) {
+		leverageFactor = roundLeverageFactor(Math.min(value, maxLeverage));
 	}
 </script>
 
-<Screen title="Leverage {collateral}" subtitle="Get leveraged exposure to {collateral} using BOLD">
+<Screen title="Leverage {branch.symbol}" subtitle="Get leveraged exposure to {branch.symbol} using BOLD">
 	<form class="leverage-form" onsubmit={handleSubmit}>
 		<!-- Collateral Selection -->
-		<CollateralSelector value={collateral} label="Select Collateral" />
+		<CollateralSelector value={branch.symbol} label="Select Collateral" />
 
 		<!-- Deposit Amount -->
 		<AmountInput
 			bind:value={depositAmount}
-			symbol={collateral}
+			symbol={branch.symbol}
 			label="Deposit Collateral"
 			secondaryValue={depositValue > 0 ? `$${depositValue.toLocaleString()}` : ''}
 			maxValue="10.5"
@@ -58,14 +140,15 @@
 
 		<!-- Leverage Slider -->
 		<Slider
-			bind:value={leverageFactor}
-			min={1.1}
-			max={5}
+			value={leverageFactor}
+			onchange={(e) => handleLeverageChange(parseFloat(e.currentTarget.value))}
+			min={LEVERAGE_FACTOR_MIN}
+			max={Math.min(maxLeverage, 5)}
 			step={0.1}
 			label="Leverage"
 			valueLabel="{leverageFactor.toFixed(1)}x"
-			minLabel="1.1x"
-			maxLabel="5.0x"
+			minLabel="{LEVERAGE_FACTOR_MIN}x"
+			maxLabel="{Math.min(maxLeverage, 5).toFixed(1)}x"
 		/>
 
 		<!-- Interest Rate -->
@@ -81,7 +164,7 @@
 				<div class="summary-item highlight">
 					<span class="summary-label">Total Exposure</span>
 					<span class="summary-value">
-						<Amount value={totalExposure} decimals={4} suffix={` ${collateral}`} />
+						<Amount value={totalExposure} decimals={4} suffix={` ${branch.symbol}`} />
 					</span>
 					<span class="summary-secondary">
 						~$<Amount value={totalExposure * collateralPrice} decimals={0} />
@@ -96,7 +179,7 @@
 				<div class="summary-item">
 					<span class="summary-label">Loan to Value (LTV)</span>
 					<span class="summary-value">
-						<Amount value={ltv} decimals={1} suffix="%" />
+						<Amount value={ltv * 100} decimals={1} suffix="%" />
 					</span>
 				</div>
 				<div class="summary-item">
@@ -113,13 +196,20 @@
 				</div>
 				<div class="summary-item">
 					<span class="summary-label">Risk Level</span>
-					<RiskBadge level={riskLevel} showLabel />
+					<RiskBadge level={riskLevel === 'liquidatable' ? 'critical' : riskLevel} showLabel />
 				</div>
 			</div>
 		</div>
 
+		<!-- Quote Error -->
+		{#if quoteError}
+			<Alert variant="error" title="Quote Error">
+				{quoteError}
+			</Alert>
+		{/if}
+
 		<!-- Warning -->
-		{#if ltv > 80}
+		{#if ltv > 0.8}
 			<Alert variant="warning" title="High Risk Warning">
 				Your leveraged position has a high LTV ratio and may be liquidated if the collateral price drops.
 			</Alert>
@@ -129,16 +219,36 @@
 		<Alert variant="info" title="How Leverage Works">
 			<ul>
 				<li>Your deposit is used as collateral to borrow BOLD</li>
-				<li>BOLD is swapped for more {collateral} to increase exposure</li>
+				<li>BOLD is swapped for more {branch.symbol} to increase exposure</li>
 				<li>Higher leverage = higher potential gains but also higher liquidation risk</li>
 			</ul>
 		</Alert>
 
 		<!-- Submit Button -->
-		<Button type="submit" variant="primary" size="lg">
-			Open Leveraged Position
-		</Button>
+		{#if !wallet.isConnected}
+			<Button type="button" variant="primary" size="lg" onclick={() => wallet.connect()}>
+				Connect Wallet
+			</Button>
+		{:else}
+			<Button
+				type="submit"
+				variant="primary"
+				size="lg"
+				disabled={!isValidPosition || isSubmitting}
+			>
+				{#if isQuoting}
+					Calculating...
+				{:else if isSubmitting}
+					Processing...
+				{:else}
+					Open Leveraged Position
+				{/if}
+			</Button>
+		{/if}
 	</form>
+
+	<!-- Transaction Modal -->
+	<TxModal />
 </Screen>
 
 <style>

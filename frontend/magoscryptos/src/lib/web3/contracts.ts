@@ -9,6 +9,9 @@ import {
 	CollateralRegistry,
 	Governance,
 	HintHelpers,
+	IExchangeHelpersV2,
+	LeverageLSTZapper,
+	LeverageWETHZapper,
 	LqtyStaking,
 	LqtyToken,
 	MultiTroveGetter,
@@ -24,6 +27,8 @@ import {
 const branchAbis = {
 	ActivePool,
 	BorrowerOperations,
+	LeverageLSTZapper,
+	LeverageWETHZapper,
 	PriceFeed,
 	SortedTroves,
 	StabilityPool,
@@ -36,6 +41,7 @@ const branchAbis = {
 const protocolAbis = {
 	BoldToken: erc20Abi,
 	CollateralRegistry,
+	ExchangeHelpersV2: IExchangeHelpersV2,
 	Governance,
 	HintHelpers,
 	LqtyStaking,
@@ -67,6 +73,8 @@ export function getBranchContract<T extends BranchContractName>(
 	const contractKeyMap: Record<BranchContractName, keyof typeof branch.contracts> = {
 		ActivePool: 'ACTIVE_POOL',
 		BorrowerOperations: 'BORROWER_OPERATIONS',
+		LeverageLSTZapper: 'LEVERAGE_ZAPPER',
+		LeverageWETHZapper: 'LEVERAGE_ZAPPER',
 		PriceFeed: 'PRICE_FEED',
 		SortedTroves: 'SORTED_TROVES',
 		StabilityPool: 'STABILITY_POOL',
@@ -98,6 +106,7 @@ export function getProtocolContract<T extends ProtocolContractName>(
 	const contractKeyMap: Record<ProtocolContractName, keyof typeof PROTOCOL_CONTRACTS> = {
 		BoldToken: 'BOLD_TOKEN',
 		CollateralRegistry: 'COLLATERAL_REGISTRY',
+		ExchangeHelpersV2: 'EXCHANGE_HELPERS_V2',
 		Governance: 'GOVERNANCE',
 		HintHelpers: 'HINT_HELPERS',
 		LqtyStaking: 'LQTY_STAKING',

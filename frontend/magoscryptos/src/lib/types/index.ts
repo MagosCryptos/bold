@@ -29,6 +29,7 @@ export interface Branch {
 export interface ProtocolContracts {
 	BOLD_TOKEN: Address;
 	COLLATERAL_REGISTRY: Address;
+	EXCHANGE_HELPERS_V2: Address;
 	GOVERNANCE: Address;
 	HINT_HELPERS: Address;
 	LQTY_STAKING: Address;

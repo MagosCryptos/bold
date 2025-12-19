@@ -120,6 +120,40 @@ export interface AdjustInterestRateRequest extends BaseTxRequest {
 	maxUpfrontFee: bigint;
 }
 
+// Open leveraged position (multiply)
+export interface OpenLeverageRequest extends BaseTxRequest {
+	flowId: 'openLeverage';
+	branchId: number;
+	ownerIndex: number; // For deterministic trove ID
+	collateralAmount: bigint; // Initial deposit
+	flashLoanAmount: bigint; // Amount to borrow via flash loan
+	boldAmount: bigint; // BOLD to swap for collateral
+	interestRate: bigint;
+	batchManager?: Address; // Optional batch manager for rate delegation
+	maxUpfrontFee: bigint;
+}
+
+// Update leveraged position (lever up/down)
+export interface UpdateLeverageRequest extends BaseTxRequest {
+	flowId: 'updateLeverage';
+	branchId: number;
+	troveId: string;
+	direction: 'up' | 'down';
+	flashLoanAmount: bigint;
+	boldAmount?: bigint; // For lever up: BOLD to borrow
+	minBoldAmount?: bigint; // For lever down: min BOLD to receive
+	maxUpfrontFee?: bigint; // For lever up
+}
+
+// Close leveraged position to collateral
+export interface CloseLeverageRequest extends BaseTxRequest {
+	flowId: 'closeLeverage';
+	branchId: number;
+	troveId: string;
+	flashLoanAmount: bigint; // Amount to flash loan for repayment
+	minCollateralAmount: bigint; // Min collateral to receive after close
+}
+
 // Union of all request types
 export type TxRequest =
 	| OpenBorrowRequest
@@ -132,7 +166,10 @@ export type TxRequest =
 	| UnstakeLqtyRequest
 	| ClaimStakingRewardsRequest
 	| RedeemBoldRequest
-	| AdjustInterestRateRequest;
+	| AdjustInterestRateRequest
+	| OpenLeverageRequest
+	| UpdateLeverageRequest
+	| CloseLeverageRequest;
 
 // Step definition for building flows
 export interface TxStepDefinition {
