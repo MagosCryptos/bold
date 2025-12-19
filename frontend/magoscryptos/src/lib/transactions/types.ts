@@ -154,6 +154,26 @@ export interface CloseLeverageRequest extends BaseTxRequest {
 	minCollateralAmount: bigint; // Min collateral to receive after close
 }
 
+// Join a batch manager for interest rate delegation
+export interface SetBatchManagerRequest extends BaseTxRequest {
+	flowId: 'setBatchManager';
+	branchId: number;
+	troveId: string;
+	batchManager: Address; // The batch manager to delegate to
+	// Constraints the user agrees to
+	minInterestRate: bigint;
+	maxInterestRate: bigint;
+	minInterestRateChangePeriod: bigint;
+}
+
+// Leave a batch manager (return to manual interest rate management)
+export interface RemoveFromBatchRequest extends BaseTxRequest {
+	flowId: 'removeFromBatch';
+	branchId: number;
+	troveId: string;
+	newInterestRate: bigint; // Rate to set after leaving batch
+}
+
 // Union of all request types
 export type TxRequest =
 	| OpenBorrowRequest
@@ -169,7 +189,9 @@ export type TxRequest =
 	| AdjustInterestRateRequest
 	| OpenLeverageRequest
 	| UpdateLeverageRequest
-	| CloseLeverageRequest;
+	| CloseLeverageRequest
+	| SetBatchManagerRequest
+	| RemoveFromBatchRequest;
 
 // Step definition for building flows
 export interface TxStepDefinition {

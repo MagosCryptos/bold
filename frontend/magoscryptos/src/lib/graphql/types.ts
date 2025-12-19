@@ -15,6 +15,14 @@ export interface InterestBatch {
 	coll: string;
 	annualInterestRate: string;
 	annualManagementFee: string;
+	collateral?: {
+		collIndex: number;
+	};
+}
+
+// Response types for batch queries
+export interface InterestBatchesResponse {
+	interestBatches: InterestBatch[];
 }
 
 export interface Trove {

@@ -84,3 +84,28 @@ export interface PoolStats {
 	totalDeposits: bigint;
 	collBalance: bigint;
 }
+
+// Batch delegation types
+export interface InterestRateChangeConstraints {
+	minInterestRate: bigint;
+	maxInterestRate: bigint;
+	minInterestRateChangePeriod: bigint; // seconds between rate changes
+}
+
+export interface Delegate {
+	id: string;
+	address: Address;
+	name: string;
+	interestRate: bigint;
+	fee: number; // Management fee as decimal (e.g., 0.01 = 1%)
+	boldAmount: bigint; // Total BOLD managed
+	constraints: InterestRateChangeConstraints;
+}
+
+export interface KnownDelegate {
+	address: Address;
+	name: string;
+	description?: string;
+	website?: string;
+	branches: BranchId[]; // Which branches this delegate operates on
+}

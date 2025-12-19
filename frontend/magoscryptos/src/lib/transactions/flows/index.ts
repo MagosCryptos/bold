@@ -27,3 +27,9 @@ export {
 	getCloseLeverageSteps,
 	getCloseLeverageFlowDefinition
 } from './leverage';
+export {
+	getSetBatchManagerSteps,
+	getSetBatchManagerFlowDefinition,
+	getRemoveFromBatchSteps,
+	getRemoveFromBatchFlowDefinition
+} from './batchDelegation';

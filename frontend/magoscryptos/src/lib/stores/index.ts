@@ -5,3 +5,4 @@ export { positions } from './positions.svelte';
 export { pools } from './pools.svelte';
 export { troves } from './troves.svelte';
 export { protocolStats } from './stats.svelte';
+export { delegates } from './delegates.svelte';
