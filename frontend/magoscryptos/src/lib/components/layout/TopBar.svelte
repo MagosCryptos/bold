@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Button from '../ui/Button.svelte';
+	import { wallet } from '$lib/stores';
 
 	interface NavItem {
 		label: string;
@@ -18,9 +19,15 @@
 		{ label: 'Stake', href: '/stake' }
 	];
 
-	let {
-		navItems = defaultNavItems
-	}: Props = $props();
+	let { navItems = defaultNavItems }: Props = $props();
+
+	function handleConnect() {
+		wallet.connect();
+	}
+
+	function handleDisconnect() {
+		wallet.disconnectWallet();
+	}
 </script>
 
 <header class="topbar">
@@ -38,9 +45,27 @@
 		</nav>
 
 		<div class="actions">
-			<Button variant="primary" size="sm">
-				Connect Wallet
-			</Button>
+			{#if wallet.isConnected && wallet.shortAddress}
+				<button class="wallet-button" onclick={handleDisconnect}>
+					<span class="wallet-address">{wallet.shortAddress}</span>
+					{#if wallet.formattedEthBalance}
+						<span class="wallet-balance">{wallet.formattedEthBalance} ETH</span>
+					{/if}
+				</button>
+			{:else}
+				<Button
+					variant="primary"
+					size="sm"
+					onclick={handleConnect}
+					disabled={wallet.isConnecting || wallet.isReconnecting}
+				>
+					{#if wallet.isConnecting || wallet.isReconnecting}
+						Connecting...
+					{:else}
+						Connect Wallet
+					{/if}
+				</Button>
+			{/if}
 		</div>
 	</div>
 </header>
@@ -109,6 +134,35 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-12);
+	}
+
+	.wallet-button {
+		display: flex;
+		align-items: center;
+		gap: var(--space-8);
+		padding: var(--space-8) var(--space-16);
+		background-color: var(--color-surface-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.wallet-button:hover {
+		background-color: var(--color-surface);
+		border-color: var(--color-content-alt);
+	}
+
+	.wallet-address {
+		font-family: var(--font-mono);
+		font-size: var(--text-sm);
+		font-weight: var(--weight-medium);
+		color: var(--color-content);
+	}
+
+	.wallet-balance {
+		font-size: var(--text-xs);
+		color: var(--color-content-alt);
 	}
 
 	/* Hide nav on mobile */

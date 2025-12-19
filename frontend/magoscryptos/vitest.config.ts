@@ -11,7 +11,8 @@ export default defineConfig({
 		setupFiles: ['./tests/setup.ts'],
 		alias: {
 			$lib: path.resolve('./src/lib'),
-			'$app/stores': path.resolve('./tests/mocks/app-stores.ts')
+			'$app/stores': path.resolve('./tests/mocks/app-stores.ts'),
+			'$env/static/public': path.resolve('./tests/mocks/env-static-public.ts')
 		}
 	},
 	resolve: {

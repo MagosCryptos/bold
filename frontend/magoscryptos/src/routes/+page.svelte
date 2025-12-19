@@ -1,44 +1,90 @@
 <script lang="ts">
 	import { Screen } from '$lib/components/layout';
 	import { PositionCard, Amount } from '$lib/components/display';
-	import { Button, TokenIcon } from '$lib/components/ui';
+	import { Button, TokenIcon, LoadingSpinner } from '$lib/components/ui';
+	import { wallet, positions, prices, pools } from '$lib/stores';
 
-	// Mock data for positions
-	const positions = [
+	// Fetch user positions when wallet connects
+	$effect(() => {
+		if (wallet.isConnected && wallet.address) {
+			positions.fetchEarnPositions();
+		} else {
+			positions.clear();
+		}
+	});
+
+	// Map earn positions to PositionCard format
+	const earnPositionCards = $derived(
+		positions.earnPositions
+			.filter((p) => p.deposit > 0n)
+			.map((p) => ({
+				type: 'earn' as const,
+				collateralSymbol: p.symbol,
+				depositAmount: Number(p.deposit) / 1e18,
+				earnedAmount: Number(p.collGain) / 1e18,
+				apr: 8.5, // TODO: Calculate from actual data
+				href: `/earn/${p.symbol.toLowerCase()}`
+			}))
+	);
+
+	// Collateral data with real prices
+	const collaterals = $derived([
 		{
-			type: 'borrow' as const,
-			collateralSymbol: 'ETH',
-			collateralAmount: 10.5,
-			debtAmount: 15000,
-			ltv: 65.2,
-			riskLevel: 'low' as const,
-			interestRate: 5.5,
-			href: '/loan?id=eth:1'
+			symbol: 'ETH',
+			name: 'Ethereum',
+			interestRate: '4.5 - 7.2%',
+			maxLtv: '90.9%',
+			price: prices.formattedPrices.ETH
 		},
 		{
-			type: 'earn' as const,
-			collateralSymbol: 'rETH',
-			depositAmount: 5000,
-			earnedAmount: 0.125,
-			apr: 8.2,
-			href: '/earn/reth'
+			symbol: 'WSTETH',
+			name: 'Lido Staked ETH',
+			interestRate: '4.0 - 6.8%',
+			maxLtv: '83.3%',
+			price: prices.formattedPrices.WSTETH
+		},
+		{
+			symbol: 'RETH',
+			name: 'Rocket Pool ETH',
+			interestRate: '3.8 - 6.5%',
+			maxLtv: '83.3%',
+			price: prices.formattedPrices.RETH
 		}
-	];
+	]);
 
-	// Mock data for collaterals
-	const collaterals = [
-		{ symbol: 'ETH', name: 'Ethereum', interestRate: '4.5 - 7.2%', maxLtv: '90.9%', totalDebt: '125.5M' },
-		{ symbol: 'rETH', name: 'Rocket Pool ETH', interestRate: '3.8 - 6.5%', maxLtv: '83.3%', totalDebt: '45.2M' },
-		{ symbol: 'wstETH', name: 'Lido Staked ETH', interestRate: '4.0 - 6.8%', maxLtv: '83.3%', totalDebt: '78.9M' }
-	];
+	// Format pool TVL
+	function formatTvl(value: bigint | undefined): string {
+		if (value === undefined || value === 0n) return '-';
+		const num = Number(value) / 1e18;
+		if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+		if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+		return num.toFixed(0);
+	}
 
-	// Mock data for earn pools
-	const earnPools = [
-		{ symbol: 'ETH', name: 'ETH Stability Pool', apr: 8.5, aprWeekly: 7.8, poolSize: '45.2M' },
-		{ symbol: 'rETH', name: 'rETH Stability Pool', apr: 9.2, aprWeekly: 8.9, poolSize: '12.8M' },
-		{ symbol: 'wstETH', name: 'wstETH Stability Pool', apr: 8.8, aprWeekly: 8.2, poolSize: '28.5M' },
-		{ symbol: 'BOLD', name: 'sBOLD Vault', apr: 6.5, aprWeekly: 6.2, poolSize: '89.4M' }
-	];
+	// Earn pools with real TVL
+	const earnPoolsData = $derived([
+		{
+			symbol: 'ETH',
+			name: 'ETH Stability Pool',
+			apr: 8.5,
+			aprWeekly: 7.8,
+			poolSize: formatTvl(pools.getPool('ETH')?.totalDeposits)
+		},
+		{
+			symbol: 'WSTETH',
+			name: 'wstETH Stability Pool',
+			apr: 8.8,
+			aprWeekly: 8.2,
+			poolSize: formatTvl(pools.getPool('WSTETH')?.totalDeposits)
+		},
+		{
+			symbol: 'RETH',
+			name: 'rETH Stability Pool',
+			apr: 9.2,
+			aprWeekly: 8.9,
+			poolSize: formatTvl(pools.getPool('RETH')?.totalDeposits)
+		}
+	]);
 </script>
 
 <Screen title="Dashboard" maxWidth="lg">
@@ -47,16 +93,27 @@
 		<div class="section-header">
 			<h2 class="section-title">Your Positions</h2>
 		</div>
-		{#if positions.length > 0}
+		{#if !wallet.isConnected}
+			<div class="empty-state">
+				<p>Connect your wallet to view your positions</p>
+				<Button variant="primary" onclick={() => wallet.connect()}>
+					Connect Wallet
+				</Button>
+			</div>
+		{:else if positions.earnLoading}
+			<div class="loading-state">
+				<LoadingSpinner label="Loading positions..." />
+			</div>
+		{:else if earnPositionCards.length > 0}
 			<div class="positions-grid">
-				{#each positions as position}
+				{#each earnPositionCards as position}
 					<PositionCard {...position} />
 				{/each}
 			</div>
 		{:else}
 			<div class="empty-state">
 				<p>You don't have any positions yet.</p>
-				<Button variant="primary" onclick={() => window.location.href = '/borrow/eth'}>
+				<Button variant="primary" onclick={() => (window.location.href = '/borrow/eth')}>
 					Open a Position
 				</Button>
 			</div>
@@ -74,9 +131,9 @@
 				<thead>
 					<tr>
 						<th>Collateral</th>
+						<th>Price</th>
 						<th>Interest Rate</th>
 						<th>Max LTV</th>
-						<th>Total Debt</th>
 						<th></th>
 					</tr>
 				</thead>
@@ -92,11 +149,24 @@
 									</div>
 								</div>
 							</td>
+							<td>
+								{#if coll.price !== undefined}
+									${coll.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+								{:else if prices.loading}
+									<LoadingSpinner size="sm" />
+								{:else}
+									-
+								{/if}
+							</td>
 							<td>{coll.interestRate}</td>
 							<td>{coll.maxLtv}</td>
-							<td>${coll.totalDebt}</td>
 							<td>
-								<Button variant="secondary" size="sm" onclick={() => window.location.href = `/borrow/${coll.symbol.toLowerCase()}`}>
+								<Button
+									variant="secondary"
+									size="sm"
+									onclick={() =>
+										(window.location.href = `/borrow/${coll.symbol.toLowerCase()}`)}
+								>
 									Borrow
 								</Button>
 							</td>
@@ -120,12 +190,12 @@
 						<th>Pool</th>
 						<th>APR</th>
 						<th>7d APR</th>
-						<th>Pool Size</th>
+						<th>TVL</th>
 						<th></th>
 					</tr>
 				</thead>
 				<tbody>
-					{#each earnPools as pool}
+					{#each earnPoolsData as pool}
 						<tr>
 							<td>
 								<div class="collateral-cell">
@@ -135,9 +205,20 @@
 							</td>
 							<td class="apr"><Amount value={pool.apr} decimals={1} suffix="%" /></td>
 							<td><Amount value={pool.aprWeekly} decimals={1} suffix="%" /></td>
-							<td>${pool.poolSize}</td>
 							<td>
-								<Button variant="secondary" size="sm" onclick={() => window.location.href = `/earn/${pool.symbol.toLowerCase()}`}>
+								{#if pools.loading}
+									<LoadingSpinner size="sm" />
+								{:else}
+									${pool.poolSize}
+								{/if}
+							</td>
+							<td>
+								<Button
+									variant="secondary"
+									size="sm"
+									onclick={() =>
+										(window.location.href = `/earn/${pool.symbol.toLowerCase()}`)}
+								>
 									Deposit
 								</Button>
 							</td>
@@ -180,10 +261,12 @@
 		gap: var(--space-16);
 	}
 
-	.empty-state {
+	.empty-state,
+	.loading-state {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		justify-content: center;
 		gap: var(--space-16);
 		padding: var(--space-48);
 		background-color: var(--color-surface);
