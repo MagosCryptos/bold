@@ -4,13 +4,26 @@
 	import { AmountInput } from '$lib/components/forms';
 	import { Amount, TokenAmount } from '$lib/components/display';
 	import { Button } from '$lib/components/ui';
+	import { TxModal } from '$lib/components/transactions';
+	import { wallet } from '$lib/stores';
+	import {
+		txContext,
+		getStakeLqtyFlowDefinition,
+		getUnstakeLqtyFlowDefinition,
+		getClaimStakingRewardsFlowDefinition,
+		type StakeLqtyRequest,
+		type UnstakeLqtyRequest,
+		type ClaimStakingRewardsRequest
+	} from '$lib/transactions';
+	import { parseEther } from 'viem';
 
 	const action = $derived($page.params.action ?? 'stake');
 
 	// Form state
 	let amount = $state('');
+	let isSubmitting = $state(false);
 
-	// Mock data
+	// Mock data - TODO: Get from contract/subgraph
 	const stakeData = {
 		stakedAmount: 10000,
 		availableBalance: 50000,
@@ -47,9 +60,82 @@
 		''
 	);
 
-	function handleSubmit(e: Event) {
+	// Validation
+	const isValidAmount = $derived(parseFloat(amount) > 0);
+	const isValidStake = $derived(
+		wallet.isConnected && isValidAmount && parseFloat(amount) <= stakeData.availableBalance
+	);
+	const isValidUnstake = $derived(
+		wallet.isConnected && isValidAmount && parseFloat(amount) <= stakeData.stakedAmount
+	);
+	const hasRewards = $derived(stakeData.earnedBold > 0 || stakeData.earnedEth > 0);
+
+	async function handleStake(e: Event) {
 		e.preventDefault();
-		window.location.href = '/transactions';
+		if (!wallet.address || !isValidStake) return;
+
+		isSubmitting = true;
+		try {
+			const request: StakeLqtyRequest = {
+				flowId: 'stakeLqty',
+				account: wallet.address,
+				amount: parseEther(amount)
+			};
+			const flowDef = getStakeLqtyFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+			amount = '';
+		} catch (error) {
+			console.error('Failed to start stake flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	async function handleUnstake(e: Event) {
+		e.preventDefault();
+		if (!wallet.address || !isValidUnstake) return;
+
+		isSubmitting = true;
+		try {
+			const request: UnstakeLqtyRequest = {
+				flowId: 'unstakeLqty',
+				account: wallet.address,
+				amount: parseEther(amount)
+			};
+			const flowDef = getUnstakeLqtyFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+			amount = '';
+		} catch (error) {
+			console.error('Failed to start unstake flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	async function handleClaim() {
+		if (!wallet.address || !hasRewards) return;
+
+		isSubmitting = true;
+		try {
+			const request: ClaimStakingRewardsRequest = {
+				flowId: 'claimStakingRewards',
+				account: wallet.address
+			};
+			const flowDef = getClaimStakingRewardsFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+		} catch (error) {
+			console.error('Failed to start claim flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	function handleSubmit(e: Event) {
+		if (isStake) {
+			handleStake(e);
+		} else if (isUnstake) {
+			handleUnstake(e);
+		}
 	}
 </script>
 
@@ -105,9 +191,20 @@
 					</div>
 				</div>
 
-				<Button type="submit" variant={isStake ? 'primary' : 'secondary'} size="lg">
-					{isStake ? 'Stake LQTY' : 'Unstake LQTY'}
-				</Button>
+				{#if !wallet.isConnected}
+					<Button type="button" variant="primary" size="lg" onclick={() => wallet.connect()}>
+						Connect Wallet
+					</Button>
+				{:else}
+					<Button
+						type="submit"
+						variant={isStake ? 'primary' : 'secondary'}
+						size="lg"
+						disabled={(isStake ? !isValidStake : !isValidUnstake) || isSubmitting}
+					>
+						{isSubmitting ? 'Processing...' : isStake ? 'Stake LQTY' : 'Unstake LQTY'}
+					</Button>
+				{/if}
 			</form>
 
 		{:else if isClaim}
@@ -131,9 +228,20 @@
 				</div>
 
 				<div class="claim-actions">
-					<Button variant="primary" size="lg" onclick={handleSubmit}>
-						Claim All Rewards
-					</Button>
+					{#if !wallet.isConnected}
+						<Button variant="primary" size="lg" onclick={() => wallet.connect()}>
+							Connect Wallet
+						</Button>
+					{:else}
+						<Button
+							variant="primary"
+							size="lg"
+							onclick={handleClaim}
+							disabled={!hasRewards || isSubmitting}
+						>
+							{isSubmitting ? 'Processing...' : 'Claim All Rewards'}
+						</Button>
+					{/if}
 					<p class="claim-note">Rewards will be sent to your connected wallet</p>
 				</div>
 			</div>
@@ -199,6 +307,9 @@
 			<a href="/stake">Go back to Stake</a>
 		{/if}
 	</div>
+
+	<!-- Transaction Modal -->
+	<TxModal />
 </Screen>
 
 <style>

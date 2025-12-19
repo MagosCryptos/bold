@@ -3,17 +3,55 @@
 	import { AmountInput } from '$lib/components/forms';
 	import { Amount, TokenAmount } from '$lib/components/display';
 	import { Button, TokenIcon } from '$lib/components/ui';
+	import { TxModal } from '$lib/components/transactions';
+	import { wallet, prices } from '$lib/stores';
+	import {
+		txContext,
+		getRedeemBoldFlowDefinition,
+		type RedeemBoldRequest
+	} from '$lib/transactions';
+	import { parseEther } from 'viem';
 
 	let redeemAmount = $state('');
+	let isSubmitting = $state(false);
 
-	// Mock data
+	// Get prices from store
+	const ethPrice = $derived(prices.getRawPrice('ETH') ?? 2450);
+	const rethPrice = $derived(prices.getRawPrice('RETH') ?? 2600);
+	const wstethPrice = $derived(prices.getRawPrice('WSTETH') ?? 2700);
+
+	// Mock data - TODO: Get actual redemption routing from contract
 	const redeemValue = $derived(parseFloat(redeemAmount) || 0);
 	const fee = $derived(redeemValue * 0.005); // 0.5% fee
 	const collateralReceived = $derived([
-		{ symbol: 'ETH', amount: redeemValue * 0.5 / 2450, value: redeemValue * 0.5 },
-		{ symbol: 'rETH', amount: redeemValue * 0.3 / 2600, value: redeemValue * 0.3 },
-		{ symbol: 'wstETH', amount: redeemValue * 0.2 / 2700, value: redeemValue * 0.2 }
+		{ symbol: 'ETH', amount: redeemValue * 0.5 / ethPrice, value: redeemValue * 0.5 },
+		{ symbol: 'rETH', amount: redeemValue * 0.3 / rethPrice, value: redeemValue * 0.3 },
+		{ symbol: 'wstETH', amount: redeemValue * 0.2 / wstethPrice, value: redeemValue * 0.2 }
 	]);
+
+	// Validation
+	const isValidRedeem = $derived(wallet.isConnected && redeemValue > 0);
+
+	async function handleRedeem() {
+		if (!wallet.address || !isValidRedeem) return;
+
+		isSubmitting = true;
+		try {
+			const request: RedeemBoldRequest = {
+				flowId: 'redeemBold',
+				account: wallet.address,
+				amount: parseEther(redeemAmount),
+				maxIterationsPerCollateral: 10
+			};
+			const flowDef = getRedeemBoldFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+			redeemAmount = '';
+		} catch (error) {
+			console.error('Failed to start redeem flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
+	}
 </script>
 
 <Screen title="Redeem BOLD" subtitle="Exchange BOLD for underlying collateral at $1 value">
@@ -57,10 +95,24 @@
 			</div>
 		{/if}
 
-		<Button variant="primary" size="lg" disabled={redeemValue <= 0}>
-			Redeem BOLD
-		</Button>
+		{#if !wallet.isConnected}
+			<Button variant="primary" size="lg" onclick={() => wallet.connect()}>
+				Connect Wallet
+			</Button>
+		{:else}
+			<Button
+				variant="primary"
+				size="lg"
+				disabled={!isValidRedeem || isSubmitting}
+				onclick={handleRedeem}
+			>
+				{isSubmitting ? 'Processing...' : 'Redeem BOLD'}
+			</Button>
+		{/if}
 	</div>
+
+	<!-- Transaction Modal -->
+	<TxModal />
 </Screen>
 
 <style>

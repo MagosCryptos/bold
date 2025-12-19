@@ -1,23 +1,63 @@
 <script lang="ts">
+	import { getContext } from 'svelte';
 	import { InterestRateField } from '$lib/components/forms';
 	import { Amount } from '$lib/components/display';
 	import { Button, Alert } from '$lib/components/ui';
+	import { wallet } from '$lib/stores';
+	import {
+		txContext,
+		getAdjustInterestRateFlowDefinition,
+		type AdjustInterestRateRequest
+	} from '$lib/transactions';
+	import { parseEther, maxUint256 } from 'viem';
+
+	// Get loan context from layout
+	const loanContext = getContext<{ loan: any }>('loan');
+	const loan = $derived(loanContext.loan);
 
 	let interestRate = $state('5.5');
 	let rateMode = $state<'manual' | 'delegate'>('manual');
+	let isSubmitting = $state(false);
 
-	// Mock current values
-	const currentRate = 5.5;
-	const currentDebt = 8500;
+	// Use real values from loan context
+	const currentRate = $derived(loan.interestRate);
+	const currentDebt = $derived(loan.debtAmount);
 
 	// Calculate yearly interest
 	const newRate = $derived(parseFloat(interestRate) || 0);
 	const yearlyInterest = $derived((currentDebt * newRate) / 100);
 	const rateChange = $derived(newRate - currentRate);
 
-	function handleSubmit(e: Event) {
+	// Validation
+	const isValidChange = $derived(
+		wallet.isConnected && newRate > 0 && Math.abs(rateChange) > 0.01
+	);
+
+	async function handleSubmit(e: Event) {
 		e.preventDefault();
-		window.location.href = '/transactions';
+		if (!wallet.address || !isValidChange) return;
+
+		isSubmitting = true;
+		try {
+			// Convert percentage to decimal (5.5% -> 0.055) then to 18 decimals
+			const newInterestRateBn = parseEther((newRate / 100).toString());
+
+			const request: AdjustInterestRateRequest = {
+				flowId: 'adjustInterestRate',
+				account: wallet.address,
+				branchId: loan.branchId,
+				troveId: loan.id,
+				newInterestRate: newInterestRateBn,
+				maxUpfrontFee: maxUint256
+			};
+
+			const flowDef = getAdjustInterestRateFlowDefinition(request);
+			await txContext.startFlow(request, flowDef);
+		} catch (error) {
+			console.error('Failed to start rate adjustment flow:', error);
+		} finally {
+			isSubmitting = false;
+		}
 	}
 </script>
 
@@ -75,9 +115,20 @@
 		</ul>
 	</Alert>
 
-	<Button type="submit" variant="primary" size="lg" disabled={newRate === currentRate}>
-		Update Interest Rate
-	</Button>
+	{#if !wallet.isConnected}
+		<Button type="button" variant="primary" size="lg" onclick={() => wallet.connect()}>
+			Connect Wallet
+		</Button>
+	{:else}
+		<Button
+			type="submit"
+			variant="primary"
+			size="lg"
+			disabled={!isValidChange || isSubmitting}
+		>
+			{isSubmitting ? 'Processing...' : 'Update Interest Rate'}
+		</Button>
+	{/if}
 </form>
 
 <style>

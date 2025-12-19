@@ -87,6 +87,39 @@ export interface EarnClaimRequest extends BaseTxRequest {
 	branchId: number;
 }
 
+// Stake LQTY
+export interface StakeLqtyRequest extends BaseTxRequest {
+	flowId: 'stakeLqty';
+	amount: bigint;
+}
+
+// Unstake LQTY
+export interface UnstakeLqtyRequest extends BaseTxRequest {
+	flowId: 'unstakeLqty';
+	amount: bigint;
+}
+
+// Claim staking rewards
+export interface ClaimStakingRewardsRequest extends BaseTxRequest {
+	flowId: 'claimStakingRewards';
+}
+
+// Redeem BOLD for collateral
+export interface RedeemBoldRequest extends BaseTxRequest {
+	flowId: 'redeemBold';
+	amount: bigint;
+	maxIterationsPerCollateral: number;
+}
+
+// Adjust interest rate
+export interface AdjustInterestRateRequest extends BaseTxRequest {
+	flowId: 'adjustInterestRate';
+	branchId: number;
+	troveId: string;
+	newInterestRate: bigint;
+	maxUpfrontFee: bigint;
+}
+
 // Union of all request types
 export type TxRequest =
 	| OpenBorrowRequest
@@ -94,7 +127,12 @@ export type TxRequest =
 	| CloseTroveRequest
 	| EarnDepositRequest
 	| EarnWithdrawRequest
-	| EarnClaimRequest;
+	| EarnClaimRequest
+	| StakeLqtyRequest
+	| UnstakeLqtyRequest
+	| ClaimStakingRewardsRequest
+	| RedeemBoldRequest
+	| AdjustInterestRateRequest;
 
 // Step definition for building flows
 export interface TxStepDefinition {
